@@ -1,0 +1,4 @@
+interface:
+  display_name: "录屏验收"
+  short_description: "真实操作并录屏验收，剪去等待、操作两倍速，配简短中文旁白并保留结果证据"
+  default_prompt: "使用 $verify-with-video 对当前结果进行真实界面录屏验收，剪去等待和冗余操作，普通操作默认 2 倍速，使用 edge-tts 微软晓晓添加与画面对齐、正常语速的简短中文旁白；不可用时回退婷婷并说明，交付精简视频及简短结论。"
