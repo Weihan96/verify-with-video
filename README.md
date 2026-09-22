@@ -17,7 +17,6 @@ A Codex skill for real UI acceptance recording: operate the target application, 
 - Window/process identity checks, before/after screenshots, recording health logs, and raw footage.
 - Save-and-reopen checks where persistence matters; no claiming UI success from scripts alone.
 - Blender/Bonsai 3D acceptance footage must use **Perspective**, including the delivered result shots.
-- Optional window-bound Blender input markers (`+ A` / `+ B`) for existing simulated-input drivers; these are visual annotations, not system cursors or a parallel-control service. See [integration and limits](references/blender-cursor.md).
 
 This is an agent workflow with native helper tools, not a one-command automatic video editor. The agent plans the interaction, inspects the footage, edits it, and aligns narration.
 
@@ -95,8 +94,6 @@ Built by **Weihan96** using Python and Apple's macOS frameworks. Video processin
 
 [Apple ScreenCaptureKit](https://developer.apple.com/documentation/screencapturekit)
 
-[Blender Foundation — Blender Python API](https://docs.blender.org/api/4.5/)
-
 [FFmpeg project](https://ffmpeg.org/)
 
 [edge-tts by rany2](https://github.com/rany2/edge-tts)
@@ -110,8 +107,6 @@ Built by **Weihan96** using Python and Apple's macOS frameworks. Video processin
 让 Codex 用真实界面操作证明修复是否有效，并交付一段精简视频：删除等待，普通操作两倍速，关键结果保留足够时间，配上简短中文旁白。保存类操作要展示重开验证；不能用后台脚本成功代替界面验收。
 
 内置 macOS 鼠标键盘、截图、录屏工具和共享桌面排队机制，核对进程与窗口归属，保留原片、操作记录和录制健康日志。Blender/Bonsai 的三维正式验收画面及成片必须使用 **Perspective 透视**。
-
-可选的 Blender 彩色 A/B 输入位置标记，可集成到已有模拟输入驱动；它是辅助标注，绑定具体窗口，并在重复启用、关闭及文件加载时清理。原生鼠标录制不默认替换。详见 [集成与限制](references/blender-cursor.md)。
 
 这是供 agent 执行的验收流程及辅助工具，不是单条命令自动生成视频的应用。观察画面、选择剪点和对齐旁白仍由 agent 完成。
 
