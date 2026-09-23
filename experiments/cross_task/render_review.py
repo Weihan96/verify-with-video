@@ -6,9 +6,13 @@ load=lambda p:json.loads(p.read_text())
 audit=load(r/'audit.json');assert audit['scenario_checks_passed'],'Scenario checks must be independently reviewed before rendering'
 rows=lambda p:[json.loads(s) for s in p.read_text().splitlines() if s.startswith('{')]
 t0=load(r/'schedule.json')['start_at'];capture=rows(r/'capture/capture.jsonl');first={pathlib.Path(x['output']).stem:x['wall_time'] for x in capture if x['event']=='first_frame'}
+# A normal queue owner may record the foreground probe independently.
+if 'Foreground' not in first:
+ logs=list((r/'Foreground').glob('record-*.jsonl'));assert len(logs)==1
+ first['Foreground']=next(x['wall_time'] for x in rows(logs[0]) if x.get('event')=='first_frame')
 font='/System/Library/Fonts/STHeiti Medium.ttc';clips=[]
 def add(src,b,e,title,subtitle,speed=2,hold=0):clips.append(dict(source=str(r/'capture'/(src+'.mp4')),source_key=src,begin=b-first[src],end=e-first[src],wall_begin=b,wall_end=e,speed=speed,freeze_seconds=hold,title=title,subtitle=subtitle))
-add('A-1',t0,t0+12,'A 独立输入、点击、拖动与旋转','任务 A · 两个真实任务同时操作；A/B 光标是辅助标注')
+add('A-1',t0,t0+12,'A 独立输入、点击、拖动与旋转',('准备队列已释放 · A/B 后台同时操作；彩色光标为标注' if audit.get('queue_handoff') else '任务 A · 两个真实任务同时操作；A/B 光标是辅助标注'))
 add('B-1',t0,t0+12,'同一时段回放 · B 独立操作','任务 B · 同步原片顺序回放，不是左右分屏')
 add('Foreground',t0,t0+8,'同一时段回放 · 前台输入','自动化探针接收原生鼠标与键盘；不是人工作业')
 add('B-1',t0+20,t0+44,'A 停录、重录 · B 继续工作','两次录屏控制均由 A task 自己发出；此片为 B 原片')
@@ -21,7 +25,7 @@ clips[-1]['freeze_source_time']=end-first['B-3']
 add('Foreground',t0+60,t0+80,'前台保持正常输入 · 焦点未转到 Blender','自动化探针 · 同期鼠标、点击、键盘事件均已记录')
 bduration=float(subprocess.check_output(['ffprobe','-v','error','-show_entries','format=duration','-of','default=nw=1:nk=1',str(r/'capture/B-3.mp4')]))
 last=first['B-3']+bduration-.1
-add('B-3',last,last,('完整复测结论 · 受限操作范围内通过' if audit['original_runner_passed'] else '隔离场景已核对 · 完整流程尚未全绿'),('首轮校验器误报已修正；独立任务完整复测与原片核对通过' if audit['original_runner_passed'] else '首轮收尾校验误报已修正；第二轮因前台切换提前中止'),speed=1,hold=10)
+add('B-3',last,last,('完整复测结论 · 受限操作范围内通过' if audit['original_runner_passed'] else '隔离场景已核对 · 完整流程尚未全绿'),('独立任务完整复测、实际操作日志与原片交叉核对通过' if audit['original_runner_passed'] else '首轮收尾校验误报已修正；第二轮因前台切换提前中止'),speed=1,hold=10)
 t=0
 for i,x in enumerate(clips):
  frames=round((x['end']-x['begin'])/x['speed']*30)+round(x['freeze_seconds']*30)
@@ -54,5 +58,5 @@ def render(x):
 with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:segments=sum(pool.map(render,clips),[])
 concat=edit/'concat.txt';concat.write_text(''.join("file '"+str(s)+"'\n" for s in segments))
 subprocess.run(['ffmpeg','-v','error','-y','-f','concat','-safe','0','-i',str(concat),'-c','copy','-movflags','+faststart',str(out/'silent.mp4')],check=True)
-mapping=dict(full_trial_passed=audit['original_runner_passed'],duration=t,chapters=chapters,clips=clips,alignment='Source video zero aligned to logged first-frame wall receipt; boundary frames independently reviewed.',waiting=dict(agent_scheduling='cut',application_long_waits='none observed in selected formal operations; no invented computation duration'),raw_run=str(r),foreground_input='automated native probe, not a human',narration='synthetic Chinese narration added after editing')
+mapping=dict(queue_handoff=audit.get('queue_handoff'),full_trial_passed=audit['original_runner_passed'],duration=t,chapters=chapters,clips=clips,alignment='Source video zero aligned to logged first-frame wall receipt; boundary frames independently reviewed.',waiting=dict(agent_scheduling='cut',application_long_waits='none observed in selected formal operations; no invented computation duration'),raw_run=str(r),foreground_input='automated native probe, not a human',narration='synthetic Chinese narration added after editing')
 (out/'edit-map.json').write_text(json.dumps(mapping,ensure_ascii=False,indent=2)+'\n');print(json.dumps(dict(duration=t,chapters=chapters),ensure_ascii=False))

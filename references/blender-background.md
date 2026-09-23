@@ -1,6 +1,6 @@
 # Blender 后台并行输入与录屏
 
-适用于 macOS、Blender 4.5.3 LTS、两个真实 Codex task 各自拥有的临时验收实例。协调 task 保留原全局队列凭据，串行准备两个不同 macOS Space 中的原生全屏窗口；正式阶段窗口内部事件与各自录屏可以同时运行。用户可继续使用前台其他应用。它不是多个系统鼠标，也不是所有 Blender 功能的通用无焦点驱动。
+适用于 macOS、Blender 4.5.3 LTS、两个真实 Codex task 各自拥有的临时验收实例。协调 task 持有全局队列凭据，串行准备两个不同 macOS Space 中的原生全屏窗口；双方通过正式准入后立即释放凭据，窗口内部事件与各自录屏可以同时运行，其他 task 可正常取得桌面队列。用户可继续使用前台其他应用。它不是多个系统鼠标，也不是所有 Blender 功能的通用无焦点驱动。
 
 代码保留在 `experiments/cross_task/` 以维持已测试的导入和接入路径，随技能安装提供。不要使用历史 `experiments/isolation/` 的同会话原型代替此入口。以下 `SKILL` 为当前安装目录，`GROUP`、`RUN`、真实 task ID 和租约均使用本次工具返回值，不能照抄旧证据。
 
@@ -9,7 +9,7 @@
 ## 建组和准备
 
 1. 协调者按 [桌面队列](desktop-queue.md) 取得凭据。复用两个已明确参与的真实 task；用户要求新建 task 时用任务工具创建，不以同一会话的两个脚本冒充。组内固定两个参与者，协调者是第三个 task；未提供这样的任务安排时，不声称任意独立 task 已自动并行。
-已入组的参与者不再自行申请全局队列，避免等待自己的协调者。
+参与者的组内后台操作不申请全局队列。若另有独立的前台应用工作，仍按普通流程申请自己的队列凭据，不能复用后台权限。
 2. 协调者建组并授权 A 准备：
 
    ```bash
@@ -25,7 +25,8 @@
 
    `--blender` 可指定实际 Blender 可执行文件。省略 `--blend` 使用当前启动场景；只有显式 `--fixture` 才创建测试面板、方块并保存实验文件。业务模式不改名、增物体或保存工作文件，仅设置临时输入配置、视口透视和窗口光标。使用已获授权的工作副本，不重启或接管用户正在编辑的实例。此启动路径需要 `--enable-event-simulate`，会影响该实例原生输入，因此仅用于 task 自己的临时实例；领域启动器必须支持这些参数及真实归属回执，否则用本入口并明确领域功能未验证。
 4. A 查看自己的 `prepared.png`，核对 PID、窗口、文件、Perspective、`native-fullscreen.json`，记录本截图实际控件坐标，然后执行 `group.py ready --group "$GROUP"`。协调者再 grant B，由 B 重复准备。必须核实两个窗口位于不同全屏桌面；不能左右分屏。只读的 `spaces.swift` 可编译到技能 `.build/` 并传入两个实际窗口 ID 核对 Space；系统接口不可用时以授权的桌面观察核实，不猜测。
-5. 两边 ready 后协调者执行 `group.py formal --group "$GROUP"`。这一阶段禁止 restore、全局输入或切换焦点；不能通过反复激活掩盖串扰。
+5. 两边 ready 后协调者执行 `group.py formal --group "$GROUP"`，固定本轮真实 task、token、run、PID 出生身份、窗口与 session 绑定。只有仍持有准备租约时才能完成准入；提前释放后不能继续准备或手写 formal。
+6. formal 成功后，立即执行 `desktop_queue.py release --lease-id "$LEASE" --outcome completed`，按返回的 `notify` 完成队首通知。后台权限此后检查正式准入和固定绑定，不要求旧租约仍有效。其他 task 可取得正常桌面队列；本组继续自己的输入、录屏和局部清理。此阶段禁止通过组权限 restore、全局输入或切换焦点；不能反复激活掩盖串扰。
 
 ## 正式录屏与输入
 
@@ -35,7 +36,7 @@
 python3 "$SKILL/experiments/cross_task/broker.py" --group "$GROUP" --seconds 1200
 ```
 
-`ready` 只说明服务就绪，还没有开始各参与者的录屏。`--foreground` 是验证前台共用时才使用的可选根 task 窗口 session，日常使用不需要前台测试应用。任一参与者退出都不能杀掉此共享服务。
+`ready` 只说明服务就绪，还没有开始各参与者的录屏。日常使用不需要前台测试应用。`--foreground` 仅接受协调者当前仍有正常桌面租约的独立前台 session，不能传入已释放旧租约的 session；也不能为了使用它而保留准备租约。验证队列交接时，让取得新租约的真实 task 自己启动、录制、操作和清理前台探针，不把其 session 塞入本组服务。任一参与者退出都不能杀掉此共享服务。
 
 各参与者独立控制自己的录屏：
 
@@ -63,17 +64,16 @@ python3 "$SKILL/scripts/desktop.py" close --isolation-group "$GROUP" --session "
 python3 "$SKILL/experiments/cross_task/group.py" closed --group "$GROUP"
 ```
 
-已经 stop 的片段不重复 stop。失败时保留失败结果和原片，必要时用 scoped `collect` 收集已停止的失败录制，不能把它改报成功；无法确认输入排空/录制结束时保留协调占用并报告。准备失败且未 bind 时用自己的真实 launch.json 清理，参照原生工具引用。
+已经 stop 的片段不重复 stop。失败时保留失败结果和原片，必要时用 scoped `collect` 收集已停止的失败录制，不能把它改报成功；无法确认输入排空/录制结束时保留本组实例与证据并报告，不申请或占住桌面队列来代替局部清理。准备阶段发生异常且仍可能占用前台时，按普通队列规则保留自己的准备租约。准备失败且未 bind 时用自己的真实 launch.json 清理，参照原生工具引用。
 
 协调者确认双方实际 task 状态、各自日志/原片和归属关闭后：
 
 ```bash
 python3 "$SKILL/experiments/cross_task/shutdown.py" "$GROUP"
 python3 "$SKILL/experiments/cross_task/group.py" finish --group "$GROUP"
-python3 "$SKILL/scripts/desktop_queue.py" release --lease-id "$LEASE" --outcome completed
 ```
 
-有前台验证实例时沿用 `desktop.py stop/close` 收集并关闭自己的前台实例，再 finish/release。保留队列通知交接规则。共享服务失效、系统休眠及未验证操作不在“互不干扰”保证内。
+必须先 shutdown 成功再 finish，服务尚未完成时 finish 会拒绝。此处不再释放准备租约，也不改变其他 task 的队列状态。有独立前台验证实例时，由持有其当前正常租约的 task 用 `desktop.py stop/close` 收集和关闭，再释放它自己的租约并完成通知交接。共享服务失效、系统休眠及未验证操作不在“互不干扰”保证内。
 
 ## 验证边界与素材
 
@@ -82,3 +82,5 @@ python3 "$SKILL/scripts/desktop_queue.py" release --lease-id "$LEASE" --outcome 
 这些证据证明该接入方式的受限操作，不能推广到所有编辑器、保存弹窗或全部 Blender 插件。`run_trial.py`、`audit.py`、前台探针与固定 70 秒剪辑脚本只用于复跑该实验，不作为日常业务录屏模板；日常剪辑按自己的实际操作记录和最终成片时间映射进行。实验顺序回放的同期素材须明确标注，不能让观众误以为两边轮流操作。
 
 发布接入检查另行验证了两个 task 各自以 `--blend` 保留场景启动、无前台探针的服务、原生 Transform X 输入与透视旋转、各自停录/重录/关闭及源文件散列不变。该接入检查的实际操作时段未重叠，不作为新的并行证据；并行与前台共用依据上述 r3 完整实验。
+
+2026-09-24 的队列解耦复测在正式输入前释放协调者准备租约，真实 B task 正常取得新租约，独立操作并录制前台探针；A/B 后台实际输入批次仍重叠约 62.8 秒。双方停录/重录、A task 结束后 B 再操作、后台组收尾不改变 B 新租约均通过，五份原片严格解码通过。前台为自动化探针，非真人；该测试证明准备租约与后台生命周期已经分开，不意味着任意 Blender 操作均可无焦点执行。

@@ -155,7 +155,7 @@ def main():
     p.add_argument('--launch-record',type=pathlib.Path)
     p.add_argument('--bonsai-launcher',type=pathlib.Path)
     p.add_argument('--worktree',type=pathlib.Path)
-    p.add_argument('--isolation-group',type=pathlib.Path,help='Experimental participant authorization under coordinator reservation')
+    p.add_argument('--isolation-group',type=pathlib.Path,help='Scoped participant authorization after serialized preparation')
     a, extras = p.parse_known_args()
     if a.isolation_group:
         require(a.command not in ('action','record','stop'),'Parallel participants must use scoped experiment clients')

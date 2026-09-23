@@ -1,6 +1,6 @@
 """Read actual receiver/capture/foreground evidence, independent of task summaries."""
-import argparse,json,pathlib
-p=argparse.ArgumentParser();p.add_argument('run',type=pathlib.Path);args=p.parse_args();run=args.run
+import argparse,datetime,json,pathlib
+p=argparse.ArgumentParser();p.add_argument('run',type=pathlib.Path);p.add_argument('--queue-handoff',action='store_true');args=p.parse_args();run=args.run
 read=lambda path:json.loads(path.read_text())
 def rows(path):return [json.loads(s) for s in path.read_text().splitlines() if s.startswith('{')]
 events={k:rows(run/k/'events.jsonl') for k in ('A','B')}
@@ -61,5 +61,20 @@ checks['system_clipboard_unchanged']=len({e['clipboard_revision'] for e in sampl
 detail['foreground']=dict(automated_not_human=True,samples=len(samples),events={t:sum(e['event']==t for e in f) for t in ('mouse_move','click','key')},pids=sorted({e['front_pid'] for e in samples}),flags=sorted({e['flags'] for e in samples}),interval=[begin,end])
 checks['capture_all_valid']=not any(e['event'] in ('capture_failed','target_failed','target_finalize_failed') for e in cap) and all(e['valid'] for e in cap if e['event']=='writer_finished')
 checks['corrected_decode_validation']=all(v['valid'] for v in read(run/'decode-revalidation.json'))
-result=dict(scenario_checks_passed=all(checks.values()),original_runner_passed=all(detail[k]['result'] for k in ('A','B')),checks=checks,detail=detail)
+handoff=None
+if args.queue_handoff:
+    handoff=read(run/'queue-handoff.json')
+    prep=handoff['preparation'];foreground=handoff['foreground']
+    seconds=lambda value:datetime.datetime.fromisoformat(value).timestamp()
+    release=seconds(prep['released_at']);acquired=seconds(foreground['acquired_at']);released=seconds(foreground['released_at'])
+    checks['preparation_released_before_all_formal_input']=handoff['admitted_at']<=release<begin and release<=acquired
+    checks['different_real_task_acquired_queue']=prep['thread_id']!=foreground['thread_id'] and foreground['thread_id']==sessions['Foreground']['thread_id'] and prep['lease_id']!=foreground['lease_id']
+    checks['new_lease_covers_background_and_cleanup']=acquired<=begin and released>=end and sessions['Foreground']['lease_id']==foreground['lease_id']
+    snapshots=handoff['snapshots']
+    checks['background_cleanup_preserves_new_owner']=any(x['stage']=='after_group_finish' and x['time']>=end and x['queue']['current']['lease_id']==foreground['lease_id'] for x in snapshots)
+    checks['queue_owner_received_real_input']=all(acquired<=e['start']<=e['end']<=released for e in actions)
+    logs=list((run/'Foreground').glob('record-*.jsonl'))
+    foreground_capture=rows(logs[0]) if len(logs)==1 else []
+    checks['independent_foreground_recorder_finished']=any(e.get('event')=='capture_finished' for e in foreground_capture) and not any(e.get('event')=='capture_failed' or 'error' in e for e in foreground_capture)
+result=dict(queue_handoff=handoff,scenario_checks_passed=all(checks.values()),original_runner_passed=all(detail[k]['result'] for k in ('A','B')),checks=checks,detail=detail)
 (run/'audit.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n');print(json.dumps(dict(scenario_checks_passed=result['scenario_checks_passed'],original_runner_passed=result['original_runner_passed'],checks=checks),ensure_ascii=False,indent=2))

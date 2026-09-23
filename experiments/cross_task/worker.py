@@ -2,7 +2,7 @@
 
 Commands are JSON files in a private run directory, consumed on Blender's main
 thread. UI actions use window events; direct assignments only prepare fixtures.
-The shared desktop lease remains held by the coordinator.
+The coordinator releases the preparation lease after fixed-session admission.
 """
 import bpy
 import blf

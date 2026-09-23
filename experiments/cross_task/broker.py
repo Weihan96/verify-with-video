@@ -3,7 +3,7 @@ import argparse,hashlib,json,pathlib,subprocess,time
 import access as a
 import desktop
 p=argparse.ArgumentParser();p.add_argument('--group',type=pathlib.Path,required=True);p.add_argument('--foreground',type=pathlib.Path);p.add_argument('--seconds',type=float,default=1200);args=p.parse_args()
-g=a.read(args.group);a.require(g['coordinator']==a.own(),'Coordinator required');desktop.check(g['reservation'])
+g=a.read(args.group);a.coordinator(g)
 a.require(0<args.seconds<=1800 and g['phase']=='formal','Bounded formal experiment required')
 sessions=[]
 for label,m in g['members'].items():

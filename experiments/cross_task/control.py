@@ -11,7 +11,7 @@ def input_control(run,participant,action):
         if state.get('control_ack')==request:
             a.require(action!='drain' or state['drained'] and state['pending']==0 and not state['held'],'Input drain incomplete');return state
         time.sleep(.05)
-    raise ValueError('Worker did not acknowledge input lifecycle; retain reservation')
+    raise ValueError('Worker did not acknowledge input lifecycle; retain own instance and evidence')
 
 def alive(record):
     try:return desktop.identity(record['pid'])==record['identity']
@@ -43,7 +43,7 @@ def _control(p,g,m,action):
                 if action=='collect':rows=a.read_rows(r['log']);break
                 raise ValueError('Broker exited during request; collect failed recording')
             time.sleep(.1)
-        else:raise ValueError('Target capture lifecycle timed out; retain reservation')
+        else:raise ValueError('Target capture lifecycle timed out; retain own instance and evidence')
     validation=[];valid=True
     if action!='start':
         starts=[(i,x) for i,x in enumerate(rows) if x.get('label')==m['label'] and x['event']=='capture_started']

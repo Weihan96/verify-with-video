@@ -70,7 +70,7 @@ This is an agent workflow with native helper tools, not a one-command automatic 
 
 ### Scope and limits
 
-The native helper controls the real desktop. Tasks on the same desktop share one queue; admitted Blender participants operate concurrently under their coordinator’s reservation, while other tasks wait; it is cooperative coordination, not an operating-system lock. It cannot prevent interference from users or tools that ignore the queue. Never change `CODEX_HOME`, fake a task ID, or reset another task's queue to bypass waiting.
+The native helper controls the real desktop. Tasks on the same desktop share one queue; Blender preparation holds the queue briefly; after formal admission the coordinator releases it, participants operate in the background, and other tasks can acquire the queue; it is cooperative coordination, not an operating-system lock. It cannot prevent interference from users or tools that ignore the queue. Never change `CODEX_HOME`, fake a task ID, or reset another task's queue to bypass waiting.
 
 The workflow does not grant permission to edit application code, overwrite user files, or publish externally. Recording can include private content: select the correct window and inspect the capture before sharing. Narration via `edge-tts` sends narration text to an online speech service; macOS Tingting is the fallback. This project provides no paid service or API key, but your agent subscription, network, and optional hosting may have their own costs.
 
@@ -160,7 +160,7 @@ Blender 已支持一个协调 task 加两个真实参与 task 的组内后台并
 
 ### 限制与可选集成
 
-原生工具会操作真实桌面。同一桌面的任务共享队列；已加入 Blender 并行组的两个任务在协调者的占用下并行，组外任务仍等待。队列是协作约定，不是系统锁，不能阻止人工输入或不遵守队列的其他工具。禁止更改 `CODEX_HOME`、伪造任务 ID 或清空别人的占用来插队。
+原生工具会操作真实桌面。同一桌面的任务共享队列；Blender 并行组只在准备与正式准入期间占用队列，随后协调者立即释放，两个任务在后台并行，其他任务可正常取得队列。队列是协作约定，不是系统锁，不能阻止人工输入或不遵守队列的其他工具。禁止更改 `CODEX_HOME`、伪造任务 ID 或清空别人的占用来插队。
 
 录屏可能包含隐私信息，分享前应核对窗口和素材。技能不会额外授权改代码、覆盖文件或对外发布。晓晓配音使用在线服务，只提交需要配音的文字；失败时回退本机婷婷并说明。项目不提供收费服务或 API 密钥，但 agent 订阅、联网及可选媒体托管可能产生各自费用。
 

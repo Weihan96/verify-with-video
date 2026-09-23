@@ -1,4 +1,4 @@
-"""Create/admit an experiment under a genuine, unchanged shared queue lease."""
+"""Admit fixed background sessions while holding the shared preparation lease."""
 import argparse,json,pathlib,uuid
 import access as a
 import desktop
@@ -24,11 +24,9 @@ else:
                 previous=g['preparing'];a.require(previous is None or g['members'][previous]['state']=='ready','Previous preparation has not completed')
                 a.require(args.label in g['members'],'Unknown label');g['preparing']=args.label
             elif args.command=='formal':
-                a.require(all(m['state']=='ready' for m in g['members'].values()),'Both participants must be ready')
-                g['phase']='formal';g['preparing']=None
+                a.admit(g)
             else:
-                a.require(all(m['state']=='closed' for m in g['members'].values()),'Participants still live')
-                g['phase']='closed'
+                a.finish(g)
             a.audit(g,args.command,label=args.label);return dict(phase=g['phase'],preparing=g['preparing'])
         m=a.member(g,a.own());run=pathlib.Path(m['run'])
         if args.command=='enroll':

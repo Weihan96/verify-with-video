@@ -7,7 +7,9 @@ texts=[
 '交换角色后，B 停录和重录，A 的输入与录像同样继续。',
 '主会话确认 A 任务已经结束后，B 又完成三组操作，随后清理自己的实例。',
 '前台持续收到鼠标、点击和键盘输入，焦点没有被抢走。这里使用自动化探针，并非真人。',
-'首轮校验误报已修正，完整复测通过。操作两倍速，已剪去调度停顿；不代表应用响应速度。']
+'独立任务与原片交叉核对通过。操作两倍速，已剪去调度停顿；不代表应用响应速度。']
+if (out/'edit-map.json').exists() and json.loads((out/'edit-map.json').read_text()).get('queue_handoff'):
+ texts[0]='准备完成就释放队列，另一任务已接手。两个真实任务的 Blender 仍在后台同时输入、点击、拖动和旋转。'
 starts=[0,16,28,40,50,60];ends=starts[1:]+[70]
 voice='zh-CN-XiaoxiaoNeural'
 if not (out/'edit-map.json').exists() or not json.loads((out/'edit-map.json').read_text()).get('full_trial_passed'):

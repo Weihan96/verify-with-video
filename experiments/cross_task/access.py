@@ -1,4 +1,4 @@
-"""Explicit child capabilities under one existing global desktop reservation.
+"""Scoped background capabilities admitted under the shared preparation lease.
 
 This is cooperative authorization, not an OS security boundary. It never changes
 the queue owner, caller task identity, queue directory or global installation.
@@ -23,13 +23,49 @@ def reservation(group):
     c=q['current']
     require(c and c['thread_id']==group['coordinator'] and c['lease_id']==group['reservation'],'Coordinator no longer holds the global reservation')
     require(group['phase']!='closed','Experiment group closed')
+# Freeze the admitted identities, not mutable lifecycle states. This is a
+# cooperative integrity check, not a signature or an OS security boundary.
+def binding(group):
+    fields=('label','thread_id','run','token_hash','session','pid','window','identity','blender_window')
+    return dict(id=group['id'],coordinator=group['coordinator'],reservation=group['reservation'],run=group['run'],
+                members={label:{key:m[key] for key in fields} for label,m in group['members'].items()})
+def binding_digest(group):
+    return digest(json.dumps(binding(group),sort_keys=True,separators=(',',':')))
+def admit(group):
+    reservation(group)
+    require(group['phase']=='preparing','Preparation already ended')
+    require(set(group['members'])=={'A','B'} and all(m['state']=='ready' for m in group['members'].values()),'Both participants must be ready')
+    group['admission']=dict(version=1,time=time.time(),binding=binding_digest(group))
+    group['phase']='formal';group['preparing']=None
+
+def active(group):
+    require(group['phase']!='closed','Experiment group closed')
+    if group['phase']=='preparing':reservation(group);return
+    require(group['phase']=='formal','Unknown group phase')
+    admission=group.get('admission',{})
+    require(admission.get('version')==1 and admission.get('binding')==binding_digest(group),'Formal admission missing or binding changed')
+
+def coordinator(group):
+    require(group['coordinator']==own(),'Coordinator required')
+    active(group)
+
+def finish(group):
+    require(all(m['state']=='closed' for m in group['members'].values()),'Participants still live')
+    broker=pathlib.Path(group['run'])/'capture/broker.json'
+    if broker.exists():
+        record=json.loads(broker.read_text())
+        require(record['coordinator']==group['coordinator'],'Broker ownership mismatch')
+        rows=read_rows(record['log'])
+        require(any(row['event']=='capture_finished' for row in rows) and not any(row['event']=='capture_failed' for row in rows),'Finalize recorder successfully before closing group')
+    group['phase']='closed'
+
 def member(group,thread):
     matches=[m for m in group['members'].values() if m['thread_id']==thread]
     require(len(matches)==1,'Actual task is not an invited participant');return matches[0]
 def digest(token):return hashlib.sha256(token.encode()).hexdigest()
 def authorize(path,token,thread,operation):
     require(thread==own(),'Caller task differs from actual environment')
-    g=read(path);reservation(g);m=member(g,thread)
+    g=read(path);active(g);m=member(g,thread)
     require(token and m.get('token_hash')==digest(token),'Participant capability mismatch')
     require(m['state']!='closed','Participant already closed')
     if operation in ('launch','windows','bind','restore','snapshot','fullscreen'):
@@ -66,4 +102,4 @@ def audit(group,event,**fields):
 def mutate(path,fn):
     path=pathlib.Path(path)
     with queue.locked(path.parent):
-        g=read(path);reservation(g);result=fn(g);queue.atomic_json(path,g);return result
+        g=read(path);active(g);result=fn(g);queue.atomic_json(path,g);return result
