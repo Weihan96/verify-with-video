@@ -14,9 +14,12 @@ A Codex skill for real UI acceptance recording: operate the target application, 
 
 - Native macOS input, screenshots, and ScreenCaptureKit recording; no built-in Computer Use dependency.
 - Cooperative FIFO desktop queue with task ownership, release, and handoff notifications.
+- Scoped Blender background operation and simultaneous recording: one coordinator admits two real tasks with separate fullscreen instances. [Setup and boundaries](references/blender-background.md).
+- Final-cut chapter buttons and explicit caption/narration disclosure for trimmed long application waits.
 - Window/process identity checks, before/after screenshots, recording health logs, and raw footage.
 - Save-and-reopen checks where persistence matters; no claiming UI success from scripts alone.
 - Blender/Bonsai 3D acceptance footage must use **Perspective**, including the delivered result shots.
+- Optional window-bound Blender input markers (`+ A` / `+ B`) for existing simulated-input drivers; these are visual annotations, not system cursors or a parallel-control service. See [integration and limits](references/blender-cursor.md).
 
 This is an agent workflow with native helper tools, not a one-command automatic video editor. The agent plans the interaction, inspects the footage, edits it, and aligns narration.
 
@@ -67,7 +70,7 @@ This is an agent workflow with native helper tools, not a one-command automatic 
 
 ### Scope and limits
 
-The native helper controls the real desktop. Tasks on the same desktop must share one queue; it is cooperative coordination, not an operating-system lock. It cannot prevent interference from users or tools that ignore the queue. Never change `CODEX_HOME`, fake a task ID, or reset another task's queue to bypass waiting.
+The native helper controls the real desktop. Tasks on the same desktop share one queue; admitted Blender participants operate concurrently under their coordinator’s reservation, while other tasks wait; it is cooperative coordination, not an operating-system lock. It cannot prevent interference from users or tools that ignore the queue. Never change `CODEX_HOME`, fake a task ID, or reset another task's queue to bypass waiting.
 
 The workflow does not grant permission to edit application code, overwrite user files, or publish externally. Recording can include private content: select the correct window and inspect the capture before sharing. Narration via `edge-tts` sends narration text to an online speech service; macOS Tingting is the fallback. This project provides no paid service or API key, but your agent subscription, network, and optional hosting may have their own costs.
 
@@ -94,6 +97,8 @@ Built by **Weihan96** using Python and Apple's macOS frameworks. Video processin
 
 [Apple ScreenCaptureKit](https://developer.apple.com/documentation/screencapturekit)
 
+[Blender Foundation — Blender Python API](https://docs.blender.org/api/4.5/)
+
 [FFmpeg project](https://ffmpeg.org/)
 
 [edge-tts by rany2](https://github.com/rany2/edge-tts)
@@ -107,6 +112,10 @@ Built by **Weihan96** using Python and Apple's macOS frameworks. Video processin
 让 Codex 用真实界面操作证明修复是否有效，并交付一段精简视频：删除等待，普通操作两倍速，关键结果保留足够时间，配上简短中文旁白。保存类操作要展示重开验证；不能用后台脚本成功代替界面验收。
 
 内置 macOS 鼠标键盘、截图、录屏工具和共享桌面排队机制，核对进程与窗口归属，保留原片、操作记录和录制健康日志。Blender/Bonsai 的三维正式验收画面及成片必须使用 **Perspective 透视**。
+
+Blender 已支持一个协调 task 加两个真实参与 task 的组内后台并行操作和独立录屏；准备仍排队，正式输入无需抢前台。业务模式保留工作文件场景，测试控件须显式启用。详见 [接入与边界](references/blender-background.md)。多章节视频提供最终成片时间戳按钮，较长应用等待剪除后保留字幕与旁白披露。
+
+可选的 Blender 彩色 A/B 输入位置标记，可集成到已有模拟输入驱动；它是辅助标注，绑定具体窗口，并在重复启用、关闭及文件加载时清理。原生鼠标录制不默认替换。详见 [集成与限制](references/blender-cursor.md)。
 
 这是供 agent 执行的验收流程及辅助工具，不是单条命令自动生成视频的应用。观察画面、选择剪点和对齐旁白仍由 agent 完成。
 
@@ -151,7 +160,7 @@ Built by **Weihan96** using Python and Apple's macOS frameworks. Video processin
 
 ### 限制与可选集成
 
-原生工具会操作真实桌面。同一桌面的任务必须共享队列；队列是协作约定，不是系统锁，不能阻止人工输入或不遵守队列的其他工具。禁止更改 `CODEX_HOME`、伪造任务 ID 或清空别人的占用来插队。
+原生工具会操作真实桌面。同一桌面的任务共享队列；已加入 Blender 并行组的两个任务在协调者的占用下并行，组外任务仍等待。队列是协作约定，不是系统锁，不能阻止人工输入或不遵守队列的其他工具。禁止更改 `CODEX_HOME`、伪造任务 ID 或清空别人的占用来插队。
 
 录屏可能包含隐私信息，分享前应核对窗口和素材。技能不会额外授权改代码、覆盖文件或对外发布。晓晓配音使用在线服务，只提交需要配音的文字；失败时回退本机婷婷并说明。项目不提供收费服务或 API 密钥，但 agent 订阅、联网及可选媒体托管可能产生各自费用。
 

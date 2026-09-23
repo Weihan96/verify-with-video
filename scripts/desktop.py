@@ -4,6 +4,14 @@ import argparse, hashlib, json, os, pathlib, subprocess, sys, time, uuid
 import desktop_queue as queue
 
 ROOT = pathlib.Path(__file__).resolve().parent
+ISOLATION_CONTEXT = None
+
+def isolation_context(path, operation):
+    """Opt-in experimental child capability; default queue checks are unchanged."""
+    global ISOLATION_CONTEXT
+    sys.path.insert(0,str(ROOT.parent/'experiments/cross_task'))
+    import access
+    ISOLATION_CONTEXT = (pathlib.Path(path), operation, access)
 
 def require(ok, message):
     if not ok:
@@ -23,7 +31,11 @@ def shared_state():
 def check(lease):
     own = os.environ.get('CODEX_THREAD_ID')
     require(own, 'CODEX_THREAD_ID required; use the actual task environment')
-    queue.execute(shared_state(), 'check', own, lease)
+    if ISOLATION_CONTEXT:
+        path,operation,access=ISOLATION_CONTEXT
+        access.authorize(path,lease,own,operation)
+    else:
+        queue.execute(shared_state(), 'check', own, lease)
     return own
 
 def binary(role="control"):
@@ -132,7 +144,7 @@ def recording_health(recording):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('command', choices=['build','windows','launch','bind','snapshot','restore','action','record','stop','close'])
+    p.add_argument('command', choices=['build','windows','launch','bind','snapshot','restore','action','record','stop','close','fullscreen'])
     p.add_argument('--lease-id');p.add_argument('--session', type=pathlib.Path)
     p.add_argument('--work', type=pathlib.Path);p.add_argument('--executable')
     p.add_argument('--pid',type=int);p.add_argument('--window',type=int)
@@ -143,7 +155,11 @@ def main():
     p.add_argument('--launch-record',type=pathlib.Path)
     p.add_argument('--bonsai-launcher',type=pathlib.Path)
     p.add_argument('--worktree',type=pathlib.Path)
+    p.add_argument('--isolation-group',type=pathlib.Path,help='Experimental participant authorization under coordinator reservation')
     a, extras = p.parse_known_args()
+    if a.isolation_group:
+        require(a.command not in ('action','record','stop'),'Parallel participants must use scoped experiment clients')
+        isolation_context(a.isolation_group,a.command)
     require(a.command=='launch' or not extras, 'Unexpected arguments: '+str(extras))
     a.arguments = extras
     if a.command == 'build':
@@ -151,11 +167,22 @@ def main():
     if a.command == 'close' and not a.session:
         own=check(a.lease_id)
         require(a.launch_record, '--launch-record required when closing without a session')
+        if ISOLATION_CONTEXT:
+            path,op,access=ISOLATION_CONTEXT
+            group,member=access.authorize(path,a.lease_id,own,op)
+            run=pathlib.Path(member['run'])
+            require(group['phase']=='preparing' and member['state']=='enrolled' and not (run/'session.json').exists(),'Unbound cleanup only during preparation')
+            require(a.launch_record.resolve()==run/'launch.json','Use own registered launch receipt')
         record=load_launch(a.launch_record,own)
         return close_owned(record,registry_path(own,record['pid'],record['identity']),a.launch_record)
     if a.command in ('windows','launch','bind'):
         own = check(a.lease_id)
         require(a.work, '--work required for launch/bind/windows')
+        if ISOLATION_CONTEXT:
+            path,op,access=ISOLATION_CONTEXT
+            _,member=access.authorize(path,a.lease_id,own,op)
+            require(a.work.resolve()==pathlib.Path(member['run']).resolve(),'Preparation outside own registered run')
+            require(a.launch_record and a.launch_record.resolve()==a.work.resolve()/'launch.json','Use own registered launch receipt')
         a.work = a.work.resolve();a.work.mkdir(parents=True,exist_ok=True)
         if a.command == 'launch':
             require(a.executable and a.launch_record, '--executable and --launch-record required')
@@ -231,6 +258,12 @@ def main():
     registry = pathlib.Path(s['registry'])
     process_state = json.loads(registry.read_text())
     s['recording'] = process_state['recording']
+    if a.command == 'fullscreen':
+        require(ISOLATION_CONTEXT,'Fullscreen setup is experimental and requires an exclusive preparation grant')
+        require(not s.get('recording'),'Fullscreen preparation cannot change a recording window')
+        result=native(target(s,'fullscreen'),work)
+        dump(work/'native-fullscreen.json',dict(result,thread_id=s['thread_id'],time=time.time()))
+        return result
     if a.command == 'restore':
         recording_health(s.get('recording'))
         key=f'{time.time_ns()}-restored'
@@ -299,6 +332,11 @@ def main():
         raise ValueError('No first frame; stop requested, use stop to collect evidence')
     if a.command == 'stop':
         rec=s.get('recording');require(rec,'No recorder registered')
+        if rec.get('cross_task_broker'):
+            sys.path.insert(0,str(ROOT.parent/'experiments/cross_task'))
+            import access
+            group=access.read(rec['group'])
+            require(group['coordinator']==os.environ.get('CODEX_THREAD_ID'),'Shared broker stop is coordinator-only; use scoped control stop/collect')
         pathlib.Path(rec['stop']).touch()
         for _ in range(150):
             text=pathlib.Path(rec['log']).read_text()
@@ -319,7 +357,11 @@ def main():
         require(not s.get('recording'), 'Stop recorder before closing')
         record=s['launch']
         require(record['pid']==s['pid'] and record['identity']==s['identity'] and record['thread_id']==s['thread_id'], 'Session launch ownership mismatch')
-        native(target(s,'release-input'),work)
+        if ISOLATION_CONTEXT:
+            state=json.loads((work/'state.json').read_text())
+            require(state.get('drained') and state.get('pending')==0 and not state.get('held'),'Drain simulated input before closing')
+        else:
+            native(target(s,'release-input'),work)
         # Persist closure on the session, retaining the original launch receipt.
         result=close_owned(record,registry,work/f'closed-{s["pid"]}.json')
         s['closed']=record['closed'];dump(a.session,s)

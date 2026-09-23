@@ -100,7 +100,8 @@ final class Input {
  }
  func run(_ a:[String:Any]) throws {
   try require(AXIsProcessTrusted() && CGPreflightPostEventAccess(),"Accessibility/input permission missing")
-  try target.focus();clean();defer{clean()}
+  if a["require_focus"] as? Bool == true {try target.checkFocus()} else {try target.focus()}
+  clean();defer{clean()}
   let spec:[String:(CGKeyCode,CGEventFlags)]=["cmd":(55,.maskCommand),"ctrl":(59,.maskControl),"shift":(56,.maskShift),"alt":(58,.maskAlternate)]
   let mods=a["modifiers"] as? [String] ?? []
   try require(mods.allSatisfy{spec[$0] != nil},"Unknown modifier")
@@ -188,6 +189,26 @@ final class Recorder:NSObject,SCStreamOutput,SCStreamDelegate {
    }
    if a["command"] as? String == "restore" {
     try t.focus();emit(["event":"restored","pid":t.pid,"window":t.id,"onscreen":true,"focused":true,"bounds":bounds(rect(try t.window())),"ui_verified":false]);return
+   }
+   if a["command"] as? String == "fullscreen" {
+    try t.focus()
+    let root=AXUIElementCreateApplication(t.pid),r=rect(try t.window())
+    let matches=(attr(root,kAXWindowsAttribute) as? [AXUIElement] ?? []).filter { e in
+     guard let ar=axRect(e) else{return false}
+     return abs(ar.minX-r.minX)<2 && abs(ar.minY-r.minY)<2 && abs(ar.width-r.width)<2 && abs(ar.height-r.height)<2
+    }
+    try require(matches.count==1,"Fullscreen requires one exact AX window match")
+    let win=matches[0],before=(attr(win,"AXFullScreen") as? Bool) ?? false
+    if !before {
+     let result=AXUIElementSetAttributeValue(win,"AXFullScreen" as CFString,kCFBooleanTrue)
+     try require(result == .success,"Native fullscreen request failed: \(result.rawValue)")
+    }
+    let deadline=Date().addingTimeInterval(5)
+    while Date()<deadline && (attr(win,"AXFullScreen") as? Bool) != true {pause(0.1)}
+    try require((attr(win,"AXFullScreen") as? Bool)==true,"Native fullscreen did not become true")
+    pause(1)
+    _=try t.window(onscreen:false)
+    emit(["event":"native_fullscreen","pid":t.pid,"window":t.id,"before":before,"fullscreen":true,"bounds":bounds(rect(try t.window(onscreen:false)))]);return
    }
    if a["command"] as? String == "action" {
     try Input(t).run(a["action"] as! [String:Any]);emit(["event":"sent","ui_verified":false,"target_window_present":(try? t.window()) != nil,"wall_time":Date().timeIntervalSince1970]);return
