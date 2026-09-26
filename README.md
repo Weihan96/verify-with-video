@@ -14,7 +14,7 @@ A Codex skill for real UI acceptance recording: operate the target application, 
 
 - Native macOS input, screenshots, and ScreenCaptureKit recording; no built-in Computer Use dependency.
 - Cooperative FIFO desktop queue with task ownership, release, and handoff notifications.
-- Scoped Blender background operation and simultaneous recording: one coordinator admits two real tasks with separate fullscreen instances. [Setup and boundaries](references/blender-background.md).
+- Scoped Blender background operation and simultaneous recording: a single real task can prepare, record and operate its own fullscreen instance through `scripts/blender_background.py`; existing coordinated multi-task sessions remain supported. [Setup and boundaries](references/blender-background.md).
 - Final-cut chapter buttons and explicit caption/narration disclosure for trimmed long application waits.
 - Window/process identity checks, before/after screenshots, recording health logs, and raw footage.
 - Save-and-reopen checks where persistence matters; no claiming UI success from scripts alone.
@@ -113,7 +113,7 @@ Built by **Weihan96** using Python and Apple's macOS frameworks. Video processin
 
 内置 macOS 鼠标键盘、截图、录屏工具和共享桌面排队机制，核对进程与窗口归属，保留原片、操作记录和录制健康日志。Blender/Bonsai 的三维正式验收画面及成片必须使用 **Perspective 透视**。
 
-Blender 已支持一个协调 task 加两个真实参与 task 的组内后台并行操作和独立录屏；准备仍排队，正式输入无需抢前台。业务模式保留工作文件场景，测试控件须显式启用。详见 [接入与边界](references/blender-background.md)。多章节视频提供最终成片时间戳按钮，较长应用等待剪除后保留字幕与旁白披露。
+Blender 支持当前单个真实 task 独立后台操作和录屏（`scripts/blender_background.py`），也保留协调者加两个真实参与 task 的多任务入口；准备仍排队，正式输入无需抢前台。业务模式保留工作文件场景，测试控件须显式启用。详见 [接入与边界](references/blender-background.md)。多章节视频提供最终成片时间戳按钮，较长应用等待剪除后保留字幕与旁白披露。
 
 可选的 Blender 彩色 A/B 输入位置标记，可集成到已有模拟输入驱动；它是辅助标注，绑定具体窗口，并在重复启用、关闭及文件加载时清理。原生鼠标录制不默认替换。详见 [集成与限制](references/blender-cursor.md)。
 
@@ -160,7 +160,7 @@ Blender 已支持一个协调 task 加两个真实参与 task 的组内后台并
 
 ### 限制与可选集成
 
-原生工具会操作真实桌面。同一桌面的任务共享队列；Blender 并行组只在准备与正式准入期间占用队列，随后协调者立即释放，两个任务在后台并行，其他任务可正常取得队列。队列是协作约定，不是系统锁，不能阻止人工输入或不遵守队列的其他工具。禁止更改 `CODEX_HOME`、伪造任务 ID 或清空别人的占用来插队。
+原生工具会操作真实桌面。同一桌面的任务共享队列；Blender 并行组只在准备与正式准入期间占用队列，正式准入后立即释放，单个或多个已准入任务继续后台操作，其他任务可正常取得队列。队列是协作约定，不是系统锁，不能阻止人工输入或不遵守队列的其他工具。禁止更改 `CODEX_HOME`、伪造任务 ID 或清空别人的占用来插队。
 
 录屏可能包含隐私信息，分享前应核对窗口和素材。技能不会额外授权改代码、覆盖文件或对外发布。晓晓配音使用在线服务，只提交需要配音的文字；失败时回退本机婷婷并说明。项目不提供收费服务或 API 密钥，但 agent 订阅、联网及可选媒体托管可能产生各自费用。
 

@@ -22,6 +22,38 @@ class AccessTests(unittest.TestCase):
         access.admit(self.g);self.save()
     def release(self):
         access.queue.execute(access.shared(),'release','test-coordinator',self.lease)
+    def solo(self):
+        self.release()
+        self.lease=access.queue.execute(access.shared(),'request','test-a')['queue']['current']['lease_id']
+        self.g.update(mode='solo',coordinator='test-a',reservation=self.lease)
+        self.g['members'].pop('B');self.save()
+    def test_single_task_owns_all_roles_without_foreground_reservation(self):
+        self.solo();self.formal()
+        access.queue.execute(access.shared(),'release','test-a',self.lease)
+        current=access.queue.execute(access.shared(),'request','test-outsider')['queue']['current']
+        access.coordinator(self.g)
+        for op in ('simulate','record-control','record-read','close'):self.check(op)
+        for op in ('action','restore','fullscreen','launch'):
+            with self.subTest(op=op),self.assertRaises(ValueError):self.check(op)
+        with patch.dict(os.environ,{'CODEX_THREAD_ID':'test-outsider'}):
+            with self.assertRaisesRegex(ValueError,'not an invited'):self.check('simulate',thread='test-outsider')
+        self.g['members']['A']['state']='closed';self.save()
+        access.mutate(self.path,access.finish)
+        self.assertEqual(access.queue.execute(access.shared(),'status')['queue']['current'],current)
+    def test_single_task_cannot_admit_another_owner(self):
+        self.solo();self.g['members']['A']['thread_id']='test-b'
+        with self.assertRaisesRegex(ValueError,'actual coordinator'):self.formal()
+    def test_single_task_cannot_add_another_participant(self):
+        self.solo();self.g['members']['B']=dict(self.g['members']['A'],thread_id='test-b')
+        with self.assertRaisesRegex(ValueError,'actual coordinator'):self.formal()
+    def test_single_task_mode_is_frozen_after_admission(self):
+        self.solo();self.formal();self.g.pop('mode');self.save()
+        with self.assertRaises(ValueError):self.check('simulate')
+    def test_multi_task_shape_still_requires_distinct_real_owners(self):
+        for owner in ('test-coordinator','test-a'):
+            with self.subTest(owner=owner):
+                self.g['members']['B']['thread_id']=owner
+                with self.assertRaisesRegex(ValueError,'two distinct'):self.formal()
     def test_formal_survives_release_and_another_queue_owner(self):
         self.formal();self.release()
         q=access.queue.execute(access.shared(),'request','test-outsider')['queue']['current']
@@ -61,6 +93,18 @@ class AccessTests(unittest.TestCase):
         self.assertEqual(self.g['phase'],'formal')
         log.write_text('{"event":"capture_finished"}\n');access.finish(self.g)
         self.assertEqual(self.g['phase'],'closed')
+    def test_failed_broker_can_close_only_after_verified_exit(self):
+        self.formal();self.release()
+        for m in self.g['members'].values():m['state']='closed'
+        capture=pathlib.Path(self.g['run'])/'capture';capture.mkdir(parents=True)
+        log=capture/'capture.jsonl';log.write_text('{"event":"capture_failed","error":"test failure"}\n')
+        (capture/'broker.json').write_text(json.dumps(dict(coordinator='test-coordinator',pid=123,identity='birth',log=str(log))))
+        with patch.object(desktop,'identity',return_value='birth'):
+            with self.assertRaisesRegex(ValueError,'still running'):access.finish(self.g)
+        import subprocess
+        with patch.object(desktop,'identity',side_effect=subprocess.CalledProcessError(1,['ps'])):access.finish(self.g)
+        self.assertEqual(self.g['phase'],'closed')
+        self.assertEqual(self.g['capture_outcome'],'failed')
     def test_exclusive_preparation(self):
         self.check()
         with patch.dict(os.environ,{'CODEX_THREAD_ID':'test-b'}):

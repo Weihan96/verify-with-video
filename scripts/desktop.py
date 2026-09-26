@@ -142,6 +142,24 @@ def recording_health(recording):
             'Recording ended or failed; stop/collect it before further input: '+text)
     require(identity(recording['pid']) == recording['identity'], 'Recorder exited or identity changed')
 
+def recover_closed_session(session, path):
+    """Complete interrupted receipt propagation without signalling any process."""
+    receipt=pathlib.Path(session['work'])/f'closed-{session["pid"]}.json'
+    if not receipt.exists():return None
+    require(session['thread_id']==os.environ.get('CODEX_THREAD_ID'),'Session belongs to another task')
+    record=json.loads(receipt.read_text())
+    require(record.get('closed') and session.get('launch') and
+            all(record.get(k)==session.get(k)==session['launch'].get(k)
+                for k in ('thread_id','pid','identity','executable')), 'Closure receipt ownership mismatch')
+    require(not json.loads(pathlib.Path(session['registry']).read_text()).get('recording'),'Stop recorder before closing')
+    try:
+        identity(session['pid'])
+    except subprocess.CalledProcessError as error:
+        require(error.returncode==1,'Cannot verify process exit')
+    else:raise ValueError('Closure receipt exists but PID is live; do not signal')
+    session['closed']=record['closed'];dump(path,session)
+    return dict(closed=session['pid'],verified_exited=True,recovered=True)
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('command', choices=['build','windows','launch','bind','snapshot','restore','action','record','stop','close','fullscreen'])
@@ -251,6 +269,10 @@ def main():
         dump(a.session,s)
         return dict(session=str(a.session),target=w,owned=owned is not None)
     require(a.session, '--session required')
+    if a.command=='close':
+        existing=json.loads(a.session.read_text());check(existing['lease_id'])
+        recovered=recover_closed_session(existing,a.session)
+        if recovered:return recovered
     # Stopping one's existing recorder remains possible after lease loss.
     s = load_session(a.session, lease=a.command!='stop') if a.command!='stop' else json.loads(a.session.read_text())
     require(s['thread_id']==os.environ.get('CODEX_THREAD_ID'),'Wrong task')

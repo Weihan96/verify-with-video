@@ -15,15 +15,20 @@ except subprocess.CalledProcessError as error:
     if error.returncode!=1:raise
     running=False
 rows=a.read_rows(r['log'])
-a.require(not any(x['event']=='capture_failed' for x in rows),'Recorder failed; retain raw evidence and inspect')
 if not running:
-    a.require(any(x['event']=='capture_finished' for x in rows),'Broker exited or changed without successful finalization')
-    print(json.dumps(dict(stopped=True,already_finished=True,log=r['log'])));raise SystemExit
+    a.require(any(x['event'] in ('capture_finished','capture_failed') for x in rows),'Broker exited or changed without finalization evidence')
+    print(json.dumps(dict(stopped=True,already_finished=True,capture_valid=not any(x['event']=='capture_failed' for x in rows),log=r['log'])));raise SystemExit
 pathlib.Path(r['stop']).touch()
 for _ in range(200):
     rows=a.read_rows(r['log'])
     if any(x['event']=='capture_finished' for x in rows):
         print(json.dumps(dict(stopped=True,log=r['log'])));break
-    a.require(not any(x['event']=='capture_failed' for x in rows),'Recorder failed; retain raw evidence and inspect')
+    if any(x['event']=='capture_failed' for x in rows):
+        try:still_running=desktop.identity(r['pid'])==r['identity']
+        except subprocess.CalledProcessError as error:
+            if error.returncode!=1:raise
+            still_running=False
+        if not still_running:
+            print(json.dumps(dict(stopped=True,capture_valid=False,log=r['log'])));break
     time.sleep(.1)
 else:raise ValueError('Recorder shutdown timeout; retain broker evidence and report')

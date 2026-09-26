@@ -2,16 +2,18 @@
 import argparse,json,pathlib,uuid
 import access as a
 import desktop
-p=argparse.ArgumentParser();p.add_argument('command',choices=['create','enroll','grant','ready','formal','closed','finish','status']);p.add_argument('--group',type=pathlib.Path);p.add_argument('--lease');p.add_argument('--run',type=pathlib.Path);p.add_argument('--member',action='append');p.add_argument('--label');args=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('command',choices=['create','enroll','grant','ready','formal','closed','finish','status']);p.add_argument('--group',type=pathlib.Path);p.add_argument('--lease');p.add_argument('--run',type=pathlib.Path);p.add_argument('--member',action='append');p.add_argument('--solo',action='store_true');p.add_argument('--label');args=p.parse_args()
 if args.command=='create':
-    desktop.check(args.lease);a.require(args.run and args.member,'Run and participants required')
-    run=args.run.resolve();a.require(not run.exists(),'New experiment run required');run.mkdir(parents=True)
+    desktop.check(args.lease);a.require(args.run and (args.solo or args.member),'Run and participants required')
+    a.require(not(args.solo and args.member),'Solo mode cannot invite other tasks')
+    run=args.run.resolve();a.require(not run.exists(),'New experiment run required')
     members={}
-    for value in args.member:
+    for value in args.member or []:
         label,thread=value.split('=',1);a.require(label in ('A','B') and label not in members and thread!=a.own(),'Distinct real participants required')
         members[label]=dict(label=label,thread_id=thread,run=str(run/label),state='invited')
-    a.require(len(members)==2 and len({m['thread_id'] for m in members.values()})==2,'Exactly two distinct invited tasks required')
-    g=dict(id=str(uuid.uuid4()),coordinator=a.own(),reservation=args.lease,run=str(run),phase='preparing',preparing=None,members=members)
+    if args.solo:members['A']=dict(label='A',thread_id=a.own(),run=str(run/'A'),state='invited')
+    g=dict(id=str(uuid.uuid4()),mode='solo' if args.solo else 'multi',coordinator=a.own(),reservation=args.lease,run=str(run),phase='preparing',preparing=None,members=members)
+    a.validate_members(g);run.mkdir(parents=True)
     directory=a.shared()/'isolation-groups';directory.mkdir(exist_ok=True)
     path=directory/(g['id']+'.json');a.queue.atomic_json(path,g);a.audit(g,'created');print(json.dumps(dict(group=str(path),run=str(run))))
 elif args.command=='status':print(json.dumps(a.read(args.group),indent=2))

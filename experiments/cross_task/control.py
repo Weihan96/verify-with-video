@@ -29,6 +29,10 @@ def _control(p,g,m,action):
     rows=a.read_rows(r['log']);baseline=len(rows);ack=None;generation=None
     if broker_alive:
         demand=pathlib.Path(r['output'])/('desired-'+m['label']+'.json');previous=json.loads(demand.read_text());generation=previous['generation']+1
+        if action=='start':
+            # Persist recovery authority before the broker can start a stream.
+            # An interrupted start is collectible but never authorizes input.
+            desktop.dump(s['registry'],dict(recording=dict(r,generation=generation,state='starting')))
         desktop.dump(demand,dict(generation=generation,active=action=='start'))
         for _ in range(200):
             rows=a.read_rows(r['log']);new=rows[baseline:]
@@ -46,12 +50,17 @@ def _control(p,g,m,action):
         else:raise ValueError('Target capture lifecycle timed out; retain own instance and evidence')
     validation=[];valid=True
     if action!='start':
-        starts=[(i,x) for i,x in enumerate(rows) if x.get('label')==m['label'] and x['event']=='capture_started']
-        a.require(starts,'Missing recorder start evidence; do not infer target shutdown')
+        starts=[(i,x) for i,x in enumerate(rows) if x.get('label')==m['label'] and x['event']=='capture_started' and x.get('generation')==active['generation']]
+        if not starts:
+            a.require(action=='collect' and (not broker_alive or ack and ack['event'] in ('target_stopped','target_failed','target_finalize_failed')),
+                      'Missing recorder start evidence; collect only after verified shutdown')
+            s['recording']=None;desktop.dump(s['registry'],dict(recording=None));desktop.dump(run/'session.json',s)
+            return dict(time=time.time(),thread_id=a.own(),label=m['label'],action=action,generation=generation,
+                        ack=ack,capture_valid=False,validation=[],reason='Interrupted start never produced capture_started',collected=True)
         begin,started=starts[-1]
         failures=[x for x in rows[begin:] if x['event']=='capture_failed' or x.get('label')==m['label'] and x['event'] in ('target_failed','target_finalize_failed')]
         finished=[x for x in rows[begin:] if x['event']=='writer_finished' and x.get('output')==started['output']]
-        valid=bool(finished and finished[-1]['valid'] and finished[-1]['frames']>0 and not failures and broker_alive)
+        valid=bool(finished and finished[-1]['valid'] and finished[-1]['frames']>0 and not failures and broker_alive and active.get('state','active')=='active')
         output=pathlib.Path(started['output'])
         decoding=validate_video(output)
         valid=valid and decoding['valid'] and decoding['decoded_frames']==finished[-1]['frames']

@@ -3,7 +3,7 @@
 This is cooperative authorization, not an OS security boundary. It never changes
 the queue owner, caller task identity, queue directory or global installation.
 """
-import hashlib,json,os,pathlib,sys,time,uuid
+import hashlib,json,os,pathlib,subprocess,sys,time,uuid
 ROOT=pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT/'scripts'))
 import desktop_queue as queue
@@ -27,19 +27,35 @@ def reservation(group):
 # cooperative integrity check, not a signature or an OS security boundary.
 def binding(group):
     fields=('label','thread_id','run','token_hash','session','pid','window','identity','blender_window')
-    return dict(id=group['id'],coordinator=group['coordinator'],reservation=group['reservation'],run=group['run'],
+    result=dict(id=group['id'],coordinator=group['coordinator'],reservation=group['reservation'],run=group['run'],
                 members={label:{key:m[key] for key in fields} for label,m in group['members'].items()})
+    # Keep existing, already admitted multi-task groups compatible.
+    if 'mode' in group:result['mode']=group['mode']
+    return result
 def binding_digest(group):
     return digest(json.dumps(binding(group),sort_keys=True,separators=(',',':')))
 def admit(group):
     reservation(group)
     require(group['phase']=='preparing','Preparation already ended')
-    require(set(group['members'])=={'A','B'} and all(m['state']=='ready' for m in group['members'].values()),'Both participants must be ready')
+    validate_members(group)
+    require(all(m['state']=='ready' for m in group['members'].values()),'All participants must be ready')
     group['admission']=dict(version=1,time=time.time(),binding=binding_digest(group))
     group['phase']='formal';group['preparing']=None
 
+def validate_members(group):
+    members=group['members'];mode=group.get('mode','multi')
+    if mode=='solo':
+        require(set(members)=={'A'} and members['A']['thread_id']==group['coordinator'],
+                'Single-task group must belong to its actual coordinator')
+    else:
+        require(mode=='multi' and set(members)=={'A','B'} and
+                len({m['thread_id'] for m in members.values()})==2 and
+                all(m['thread_id']!=group['coordinator'] for m in members.values()),
+                'Multi-task group requires two distinct invited tasks')
+
 def active(group):
     require(group['phase']!='closed','Experiment group closed')
+    validate_members(group)
     if group['phase']=='preparing':reservation(group);return
     require(group['phase']=='formal','Unknown group phase')
     admission=group.get('admission',{})
@@ -56,7 +72,16 @@ def finish(group):
         record=json.loads(broker.read_text())
         require(record['coordinator']==group['coordinator'],'Broker ownership mismatch')
         rows=read_rows(record['log'])
-        require(any(row['event']=='capture_finished' for row in rows) and not any(row['event']=='capture_failed' for row in rows),'Finalize recorder successfully before closing group')
+        failed=any(row['event']=='capture_failed' for row in rows)
+        require(any(row['event'] in ('capture_finished','capture_failed') for row in rows),'Finalize recorder before closing group')
+        if failed:
+            import desktop
+            try:running=desktop.identity(record['pid'])==record['identity']
+            except subprocess.CalledProcessError as error:
+                if error.returncode!=1:raise
+                running=False
+            require(not running,'Failed recorder still running')
+        group['capture_outcome']='failed' if failed else 'completed'
     group['phase']='closed'
 
 def member(group,thread):
@@ -84,6 +109,7 @@ def participant(path,operation):
 def recording(session):
     r=json.loads(pathlib.Path(session['registry']).read_text()).get('recording')
     require(r and r.get('cross_task_broker'),'Own target has no active recorder')
+    require(r.get('state','active')=='active','Recorder start is pending; collect before retrying')
     import desktop
     require(desktop.identity(r['pid'])==r['identity'],'Broker exited or changed identity')
     rows=read_rows(r['log']);label=r['label']
