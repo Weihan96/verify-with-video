@@ -133,6 +133,40 @@ class WindowRecoveryTests(unittest.TestCase):
             loaded = desktop.load_launch(self.receipt_path, self.own)
         self.assertEqual(loaded["receipt"]["owner"]["basis"], "explicit_task")
 
+    def test_existing_launcher_process_never_creates_close_ownership(self):
+        receipt = self.root / 'not-new.json'
+        with patch.dict(os.environ, {'PROJECT_CONTROL_TASK_ID': ''}), patch.object(desktop, 'launcher_output', return_value=json.dumps({'status':'existing','pid':self.pid})):
+            with self.assertRaisesRegex(ValueError, 'existing process'):
+                self.cli('launch','--lease-id','lease','--work',self.work,'--launch-record',receipt,
+                         '--executable',self.exe,'--bonsai-launcher',self.root/'launcher.ts','--worktree',self.root)
+        self.assertFalse(receipt.exists())
+        desktop.os.kill.assert_not_called()
+
+    def test_launcher_failures_preserve_only_uncertain_launch_receipts(self):
+        for index,(response,error,retained) in enumerate([
+            (json.dumps({'status':'not_started','error':'invalid setup'}),None,False),
+            (None,subprocess.CalledProcessError(1,['bun']),True),
+        ]):
+            receipt=self.root/f'failure-{index}.json'
+            with self.subTest(index=index), patch.dict(os.environ, {'PROJECT_CONTROL_TASK_ID':''}), patch.object(desktop,'launcher_output',return_value=response,side_effect=error):
+                with self.assertRaises((ValueError,OSError,subprocess.CalledProcessError)):
+                    self.cli('launch','--lease-id','lease','--work',self.work,'--launch-record',receipt,
+                             '--executable',self.exe,'--bonsai-launcher',self.root/'launcher.ts','--worktree',self.root)
+                self.assertEqual(receipt.exists(),retained)
+        desktop.os.kill.assert_not_called()
+
+    def test_only_failure_to_spawn_launcher_clears_pending_receipt(self):
+        pending={'thread_id':self.own,'status':'launching','request_id':'test'}
+        self.write(self.receipt_path,pending)
+        with patch.object(desktop.subprocess,'Popen',side_effect=FileNotFoundError('bun missing')):
+            with self.assertRaises(FileNotFoundError):desktop.launcher_output(['bun'],self.receipt_path,pending)
+        self.assertFalse(self.receipt_path.exists())
+        self.write(self.receipt_path,pending)
+        with patch.object(desktop.subprocess,'Popen') as spawn:
+            spawn.return_value.communicate.side_effect=OSError('pipe read failed after spawn')
+            with self.assertRaises(OSError):desktop.launcher_output(['bun'],self.receipt_path,pending)
+        self.assertEqual(json.loads(self.receipt_path.read_text()),pending)
+
     def test_foreign_thread_receipt_is_rejected_before_signal(self):
         self.write(self.receipt_path, {**self.record, "thread_id": "another-task"})
         with self.assertRaises(ValueError):

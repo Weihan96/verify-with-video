@@ -20,6 +20,22 @@ def require(ok, message):
 def dump(path, value):
     queue.atomic_json(pathlib.Path(path), value)
 
+def clear_pending_launch(path, pending):
+    require(json.loads(path.read_text())==pending, 'Launch receipt changed; preserve it for inspection')
+    path.unlink()
+
+def launcher_output(command, path, pending):
+    try:
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    except OSError:
+        clear_pending_launch(path, pending)
+        raise
+    # After Popen succeeds, any interruption or communication error is uncertain.
+    output, error = process.communicate()
+    if process.returncode:
+        raise subprocess.CalledProcessError(process.returncode, command, output=output, stderr=error)
+    return output
+
 def identity(pid):
     r = subprocess.run(['ps', '-p', str(pid), '-o', 'lstart=', '-o', 'comm='], text=True, capture_output=True, check=True)
     require(bool(r.stdout.strip()), 'Process not alive')
@@ -206,14 +222,20 @@ def main():
             require(a.executable and a.launch_record, '--executable and --launch-record required')
             require(not a.launch_record.exists(), 'Launch record exists; use a new path')
             a.launch_record.parent.mkdir(parents=True, exist_ok=True)
-            dump(a.launch_record, dict(thread_id=own,status='launching'))
+            pending = dict(thread_id=own,status='launching',request_id=str(uuid.uuid4()))
+            dump(a.launch_record, pending)
             executable = str(pathlib.Path(a.executable).resolve(strict=True))
             args = a.arguments[1:] if a.arguments[:1]==['--'] else a.arguments
             if a.bonsai_launcher:
                 require(a.worktree, '--worktree required with --bonsai-launcher')
                 require(not os.environ.get('PROJECT_CONTROL_TASK_ID') or os.environ['PROJECT_CONTROL_TASK_ID'].strip()==own, 'Launcher task override conflicts with current task')
                 require(not any(arg=='--task-id' or arg.startswith('--task-id=') for arg in args), 'Do not override current task identity in launcher arguments')
-                receipt = json.loads(subprocess.check_output(['bun',str(a.bonsai_launcher),'--worktree',str(a.worktree.resolve()),'--blender',executable,*args],text=True))
+                output = launcher_output(['bun',str(a.bonsai_launcher),'--worktree',str(a.worktree.resolve()),'--blender',executable,*args],a.launch_record,pending)
+                receipt = json.loads(output)
+                if receipt.get('status') in ('existing','not_started'):
+                    # No new process was created; do not retain false close ownership.
+                    clear_pending_launch(a.launch_record,pending)
+                require(receipt.get('status')!='not_started','Launcher preparation failed before process creation: '+str(receipt.get('error')))
                 require(receipt['status']=='started','Launcher returned existing process; inspect and attach without close ownership')
                 pid=receipt['pid']
                 data = dict(thread_id=own,pid=pid,identity=identity(pid),executable=executable,receipt=receipt,created=time.time())

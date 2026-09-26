@@ -9,6 +9,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'experiments/cross_task'))
 import access
+import scene_options
 
 
 def call(script, *args, capture=True):
@@ -36,26 +37,19 @@ def main():
     parser.add_argument('command', choices=['prepare', 'admit', 'serve', 'start', 'send', 'stop', 'collect', 'close', 'status'])
     parser.add_argument('--run', type=pathlib.Path, required=True)
     parser.add_argument('--lease')
-    scene = parser.add_mutually_exclusive_group()
-    scene.add_argument('--blend', type=pathlib.Path)
-    scene.add_argument('--fixture', action='store_true')
-    parser.add_argument('--blender', type=pathlib.Path)
+    scene_options.add_arguments(parser)
     parser.add_argument('--seconds', type=float, default=1200)
     parser.add_argument('--events', help='JSON array of supported Window.event_simulate events')
     args = parser.parse_args()
     run = args.run.resolve()
     if args.command == 'prepare':
         access.require(args.lease, 'Preparation requires the current desktop lease')
-        if args.blend:access.require(args.blend.is_file(), 'Blend workfile missing')
-        if args.blender:access.require(args.blender.is_file(), 'Blender executable missing')
+        scene_options.validate(args)
         created = call('experiments/cross_task/group.py', 'create', '--solo', '--lease', args.lease, '--run', run)
         access.queue.atomic_json(run / 'background.json', created)
         group = created['group']
         call('experiments/cross_task/group.py', 'grant', '--group', group, '--label', 'A')
-        options = []
-        if args.blend:options += ['--blend', args.blend.resolve()]
-        if args.fixture:options += ['--fixture']
-        if args.blender:options += ['--blender', args.blender.resolve()]
+        options = scene_options.forwarded(args)
         call('experiments/cross_task/prepare.py', group, *options, capture=False)
         return dict(**created, screenshot=str(run / 'A/prepared.png'),
                     next='Inspect screenshot, file, Perspective and coordinates; then admit. Keep preparation lease until admitted or cleaned up.')

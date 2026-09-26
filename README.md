@@ -76,7 +76,7 @@ The workflow does not grant permission to edit application code, overwrite user 
 
 Only macOS native desktop operation is bundled. Linux can use the POSIX queue, but this repository does not provide Linux/Windows desktop drivers. English requests work, while the skill instructions and default narration are Chinese; request another narration language explicitly.
 
-Optional integrations are **not bundled**: `on-mobile` for phone-accessible delivery, and `bonsai-launcher` for task-owned Blender launch workflows. Without them, deliver a local video and bind an already opened, verified task window; do not invent missing tools or claim the integrations were tested.
+Optional integrations are **not bundled**: `on-mobile` for phone-accessible delivery, and `bonsai-launcher` for task-owned IFC loading. The background entry accepts `--ifc`, the actual `--worktree`, and an optional project `--prepare-script`; it reuses the installed Bonsai launch plan, then starts its input receiver without saving a `.blend`. See the [IFC preparation workflow](references/blender-background.md). Without Bonsai launcher, `.blend` background preparation and ordinary native desktop operation remain available; IFC preparation reports the missing dependency before creating a group. Without `on-mobile`, deliver a local video.
 
 ### Troubleshooting
 
@@ -166,7 +166,7 @@ Blender 支持当前单个真实 task 独立后台操作和录屏（`scripts/ble
 
 内置桌面工具仅支持 macOS；POSIX 队列可用于 Linux，但本仓库不提供 Linux/Windows 桌面驱动。说明和默认旁白为中文，可明确要求其他旁白语言。
 
-手机链接用的 `on-mobile`、自动启动 Blender 用的 `bonsai-launcher` 是**未随包提供的可选集成**。没有时交付本地视频、绑定已打开且核实归属的任务窗口；不能虚构集成已安装或已验证。
+手机链接用的 `on-mobile`、按任务归属加载 IFC 的 `bonsai-launcher` 是**未随包提供的可选集成**。后台入口支持 `--ifc`、实际 `--worktree` 和可选的项目 `--prepare-script`，复用已安装的 Bonsai 启动计划后再启动输入接收器，无须另存 `.blend`。详见 [IFC 准备流程](references/blender-background.md)。未安装 Bonsai 启动器时仍可使用 `.blend` 后台准备和普通原生桌面流程，IFC 准备会在建组前报告缺失依赖；没有 `on-mobile` 时交付本地视频。
 
 ### 常见问题
 
