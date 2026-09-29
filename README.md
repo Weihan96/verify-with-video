@@ -68,6 +68,8 @@ This is an agent workflow with native helper tools, not a one-command automatic 
 - “Record the Blender cabinet acceptance flow. Keep every 3D shot in Perspective and include the final result.”
 - “Trim this existing recording, remove waiting, and add short Chinese narration. Do not operate the app again.”
 
+Automatic review stays silent on your computer: narration is written to files, and browser playback/chapters are checked with the target player muted. The delivered video retains narration and required original audio. Audible listening requires your explicit request; system volume and other apps are untouched.
+
 ### Scope and limits
 
 The native helper controls the real desktop. Tasks on the same desktop share one queue; Blender preparation holds the queue briefly; after formal admission the coordinator releases it, participants operate in the background, and other tasks can acquire the queue; it is cooperative coordination, not an operating-system lock. It cannot prevent interference from users or tools that ignore the queue. Never change `CODEX_HOME`, fake a task ID, or reset another task's queue to bypass waiting.
@@ -157,6 +159,8 @@ Blender 支持当前单个真实 task 独立后台操作和录屏（`scripts/ble
 - “用 $verify-with-video 验收这个设置修复，展示修改、保存和重开，交付短视频。”
 - “录屏验收 Blender 橱柜，三维画面全部使用透视，最后展示结果。”
 - “把现有录屏剪短，删掉等待，加简短中文旁白，不要重新操作应用。”
+
+自动验收不会在电脑上外放：旁白只写入文件，浏览器播放和章节检查先静音目标播放器。交付视频保留旁白和需要的原声；只有你明确要求试听时才外放，不改系统音量或其他应用。
 
 ### 限制与可选集成
 
